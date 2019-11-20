@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 clap = "2.33.0"
 dirs = "2.0.2"
+crossbeam = "0.7.3"

@@ -1,7 +1,15 @@
+use crossbeam::channel;
 use dirs;
-use std::{error::Error, fs, path::Path, time::Duration};
+use std::{
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+    thread,
+    time::Duration,
+};
 
 mod local;
+mod remote;
 
 /// The name of the temporary directory in the home directory to collect
 /// intermediate files.
@@ -9,7 +17,8 @@ const TMP_DIR: &str = "shepherd_tmp";
 /// The name of the encoded audio track.
 const AUDIO: &str = "audio.aac";
 /// The length of chunks to split the video into.
-const SEGMENT_LENGTH: Duration = Duration::from_secs(30);
+/// TODO: this is so short for testing, raise to 1 minute afterwards
+const SEGMENT_LENGTH: Duration = Duration::from_secs(10);
 
 /// The generic result type for this crate.
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -58,6 +67,40 @@ pub fn run_local(
     // Split the video
     println!("Splitting video into chunks");
     local::split_video(input, &chunk_dir, SEGMENT_LENGTH)?;
+    // Get the list of created chunks
+    let chunks = fs::read_dir(&chunk_dir)?
+        .map(|res| res.and_then(|readdir| Ok(readdir.path())))
+        .collect::<std::io::Result<Vec<PathBuf>>>()?;
+
+    // Initialize the global channel for chunks
+    let (sender, receiver) = channel::unbounded();
+    // Send all chunks into it
+    for chunk in chunks {
+        sender.send(chunk)?;
+    }
+    // Drop the sender so the channel gets disconnected
+    drop(sender);
+
+    // Spawn threads for hosts
+    let mut host_threads = Vec::with_capacity(hosts.len());
+    for &host in &hosts {
+        // Create owned hostname to move into the thread
+        let host = host.to_string();
+        // Clone the queue receiver for the thread
+        let thread_receiver = receiver.clone();
+        // Start it
+        let handle = thread::spawn(|| {
+            remote::host_thread(host, thread_receiver);
+        });
+        host_threads.push(handle);
+    }
+
+    // Wait for all hosts to finish
+    for handle in host_threads {
+        if let Err(e) = handle.join() {
+            println!("Thread for a host panicked: {:?}", e);
+        }
+    }
 
     Ok(())
 }
