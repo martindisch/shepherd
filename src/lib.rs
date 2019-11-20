@@ -1,5 +1,5 @@
 use dirs;
-use std::{error::Error, fs, path::Path};
+use std::{error::Error, fs, path::Path, time::Duration};
 
 mod local;
 
@@ -8,6 +8,8 @@ mod local;
 const TMP_DIR: &str = "shepherd_tmp";
 /// The name of the encoded audio track.
 const AUDIO: &str = "audio.aac";
+/// The length of chunks to split the video into.
+const SEGMENT_LENGTH: Duration = Duration::from_secs(30);
 
 /// The generic result type for this crate.
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -46,8 +48,16 @@ pub fn run_local(
     let mut audio = tmp_dir.to_path_buf();
     audio.push(AUDIO);
     // Start the extraction
-    println!("Starting audio extraction");
+    println!("Extracting audio");
     local::extract_audio(input, &audio)?;
+
+    // Create directory for video chunks
+    let mut chunk_dir = tmp_dir.to_path_buf();
+    chunk_dir.push("chunks");
+    fs::create_dir(&chunk_dir)?;
+    // Split the video
+    println!("Splitting video into chunks");
+    local::split_video(input, &chunk_dir, SEGMENT_LENGTH)?;
 
     Ok(())
 }
