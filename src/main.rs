@@ -1,4 +1,7 @@
 use clap::{App, Arg};
+use std::process;
+
+use shepherd;
 
 fn main() {
     let matches = App::new(clap::crate_name!())
@@ -32,4 +35,11 @@ fn main() {
     let input = matches.value_of("IN").unwrap();
     let output = matches.value_of("OUT").unwrap();
     let hosts = matches.value_of("clients").unwrap().split(',');
+
+    if cfg!(debug_assertions) {
+        shepherd::run(input, output, hosts.collect()).unwrap();
+    } else if let Err(e) = shepherd::run(input, output, hosts.collect()) {
+        eprintln!("{}", e);
+        process::exit(1);
+    }
 }
