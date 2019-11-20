@@ -38,6 +38,7 @@ pub fn run(
     let result = run_local(input.as_ref(), output.as_ref(), &tmp_dir, hosts);
 
     // Clean up infallibly
+    // TODO: make sure this also happens when stopped with Ctrl + C
     fs::remove_dir_all(&tmp_dir).ok();
 
     result
