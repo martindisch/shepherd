@@ -23,7 +23,7 @@ pub fn host_thread(
     );
 
     // Create a channel holding a single chunk at a time for the encoder thread
-    let (sender, receiver) = channel::bounded(1);
+    let (sender, receiver) = channel::bounded(0);
     // Create copy of host for thread
     let host_cpy = host.clone();
     // Start the encoder thread
