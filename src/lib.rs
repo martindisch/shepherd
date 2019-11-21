@@ -1,3 +1,6 @@
+//! A distributed video encoder that splits files into chunks for multiple
+//! machines.
+
 use crossbeam::channel;
 use dirs;
 use log::{error, info};
@@ -25,6 +28,11 @@ const SEGMENT_LENGTH: Duration = Duration::from_secs(30);
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 /// Starts the whole operation and cleans up afterwards.
+///
+/// # Arguments
+/// * `input` - The path to the input file.
+/// * `output` - The path to the output file.
+/// * `hosts` - Comma-separated list of hosts.
 pub fn run(
     input: impl AsRef<Path>,
     output: impl AsRef<Path>,
@@ -49,7 +57,7 @@ pub fn run(
 ///
 /// This is separate so it can fail and return early, since cleanup is then
 /// handled in its caller function.
-pub fn run_local(
+fn run_local(
     input: &Path,
     output: &Path,
     tmp_dir: &Path,

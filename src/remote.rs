@@ -1,7 +1,10 @@
+//! Functions for operations on remote hosts.
+
 use crossbeam::channel::{self, Receiver};
 use log::{debug, info};
 use std::{path::PathBuf, process::Command, thread};
 
+/// The name of the temporary directory in the home directory of remote hosts.
 static TMP_DIR: &str = "shepherd_tmp_remote";
 
 /// The parent thread managing the operations for a host.
@@ -78,10 +81,7 @@ pub fn host_thread(
 }
 
 /// Encodes chunks on a host and returns the encoded remote file names.
-pub fn encoder_thread(
-    host: String,
-    receiver: Receiver<PathBuf>,
-) -> Vec<String> {
+fn encoder_thread(host: String, receiver: Receiver<PathBuf>) -> Vec<String> {
     // We'll use this to store the encoded chunks' remote file names.
     let mut encoded = Vec::new();
 

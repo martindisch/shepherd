@@ -1,3 +1,5 @@
+//! Functions for operations on the local host.
+
 use std::{fs, path::Path, process::Command, time::Duration};
 
 use super::Result;
