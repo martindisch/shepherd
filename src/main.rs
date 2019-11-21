@@ -1,6 +1,6 @@
 use clap::{App, Arg};
 use log::error;
-use simplelog::{Config, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 use std::process;
 
 use shepherd;
@@ -40,7 +40,7 @@ fn main() {
 
     TermLogger::init(
         LevelFilter::Info,
-        Config::default(),
+        ConfigBuilder::new().set_time_to_local(true).build(),
         TerminalMode::Mixed,
     )
     .expect("Failed initializing logger");
