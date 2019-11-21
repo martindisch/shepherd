@@ -109,5 +109,9 @@ pub fn run_local(
         }
     }
 
+    // Combine encoded chunks and audio
+    println!("Combining encoded chunks into final video");
+    local::combine(&encoded_dir, &audio, output)?;
+
     Ok(())
 }
