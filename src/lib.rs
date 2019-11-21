@@ -70,9 +70,12 @@ pub fn run_local(
     info!("Splitting video into chunks");
     local::split_video(input, &chunk_dir, SEGMENT_LENGTH)?;
     // Get the list of created chunks
-    let chunks = fs::read_dir(&chunk_dir)?
+    let mut chunks = fs::read_dir(&chunk_dir)?
         .map(|res| res.and_then(|readdir| Ok(readdir.path())))
         .collect::<std::io::Result<Vec<PathBuf>>>()?;
+    // Sort them so they're in order. That's not strictly necessary, but nicer
+    // for the user to watch since it allows seeing the progress at a glance.
+    chunks.sort();
 
     // Initialize the global channel for chunks
     let (sender, receiver) = channel::unbounded();
