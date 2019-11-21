@@ -22,9 +22,7 @@ pub fn host_thread(host: String, global_receiver: Receiver<PathBuf>) {
     // Create copy of host for thread
     let host_cpy = host.clone();
     // Start the encoder thread
-    let handle = thread::spawn(move || {
-        encoder_thread(host_cpy, receiver);
-    });
+    let handle = thread::spawn(move || encoder_thread(host_cpy, receiver));
 
     // Try to fetch a chunk from the global channel
     while let Ok(chunk) = global_receiver.recv() {
@@ -47,7 +45,8 @@ pub fn host_thread(host: String, global_receiver: Receiver<PathBuf>) {
     println!("Host thread {} waiting for encoder to finish", host);
 
     // Wait for the encoder
-    handle.join().expect("Encoder thread panicked");
+    let encoded = handle.join().expect("Encoder thread panicked");
+    println!("Host thread {} got encoded chunks {:?}", host, encoded);
 
     // Clean up temporary directory on host
     let output = Command::new("ssh")
@@ -61,8 +60,14 @@ pub fn host_thread(host: String, global_receiver: Receiver<PathBuf>) {
     println!("Host thread {} exiting", host);
 }
 
-/// The thread responsible for encoding files on a host.
-pub fn encoder_thread(host: String, receiver: Receiver<PathBuf>) {
+/// Encodes chunks on a host and returns the encoded remote file names.
+pub fn encoder_thread(
+    host: String,
+    receiver: Receiver<PathBuf>,
+) -> Vec<String> {
+    // We'll use this to store the encoded chunks' remote file names.
+    let mut encoded = Vec::new();
+
     while let Ok(chunk) = receiver.recv() {
         println!("Encoder thread {} received chunk {:?}", host, chunk);
         // Construct the chunk's remote file name
@@ -111,6 +116,11 @@ pub fn encoder_thread(host: String, receiver: Receiver<PathBuf>) {
             .output()
             .expect("Failed executing ssh command");
         assert!(output.status.success(), "Failed encoding");
+
+        // Remember the encoded chunk
+        encoded.push(enc_name);
     }
     println!("Encoder thread {} exiting", host);
+
+    encoded
 }
