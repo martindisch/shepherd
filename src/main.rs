@@ -17,10 +17,18 @@ fn main() {
             Arg::with_name("clients")
                 .short("c")
                 .long("clients")
-                .value_name("HOSTNAMES")
+                .value_name("hostnames")
                 .takes_value(true)
                 .required(true)
                 .help("Comma-separated list of encoding hosts"),
+        )
+        .arg(
+            Arg::with_name("length")
+                .short("l")
+                .long("length")
+                .value_name("seconds")
+                .takes_value(true)
+                .help("The length of video chunks in seconds"),
         )
         .arg(
             Arg::with_name("IN")
@@ -33,10 +41,11 @@ fn main() {
                 .required(true),
         )
         .get_matches();
-    // If we get here, we know the arguments were supplied, so unwrap is safe
+    // If we get here, unwrap is safe on mandatory arguments
     let input = matches.value_of("IN").unwrap();
     let output = matches.value_of("OUT").unwrap();
     let hosts = matches.value_of("clients").unwrap().split(',');
+    let seconds = matches.value_of("length").unwrap_or("60");
 
     TermLogger::init(
         LevelFilter::Info,
@@ -46,8 +55,10 @@ fn main() {
     .expect("Failed initializing logger");
 
     if cfg!(debug_assertions) {
-        shepherd::run(input, output, hosts.collect()).unwrap();
-    } else if let Err(e) = shepherd::run(input, output, hosts.collect()) {
+        shepherd::run(input, output, hosts.collect(), seconds).unwrap();
+    } else if let Err(e) =
+        shepherd::run(input, output, hosts.collect(), seconds)
+    {
         error!("{}", e);
         process::exit(1);
     }

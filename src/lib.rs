@@ -23,9 +23,6 @@ mod remote;
 const TMP_DIR: &str = "shepherd_tmp";
 /// The name of the encoded audio track.
 const AUDIO: &str = "audio.aac";
-/// The length of chunks to split the video into.
-/// TODO: this is so short for testing, raise to 1 minute afterwards
-const SEGMENT_LENGTH: Duration = Duration::from_secs(30);
 
 /// The generic result type for this crate.
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -36,11 +33,16 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 /// * `input` - The path to the input file.
 /// * `output` - The path to the output file.
 /// * `hosts` - Comma-separated list of hosts.
+/// * `seconds` - The video chunk length.
 pub fn run(
     input: impl AsRef<Path>,
     output: impl AsRef<Path>,
     hosts: Vec<&str>,
+    seconds: &str,
 ) -> Result<()> {
+    // Convert the length
+    let seconds = seconds.parse::<u64>()?;
+
     // Set up a shared boolean to check whether the user has aborted
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -64,6 +66,7 @@ pub fn run(
         output.as_ref(),
         &tmp_dir,
         &hosts,
+        seconds,
         running.clone(),
     );
 
@@ -100,6 +103,7 @@ fn run_local(
     output: &Path,
     tmp_dir: &Path,
     hosts: &[&str],
+    seconds: u64,
     running: Arc<AtomicBool>,
 ) -> Result<()> {
     // Build path to audio file
@@ -122,7 +126,12 @@ fn run_local(
     fs::create_dir(&chunk_dir)?;
     // Split the video
     info!("Splitting video into chunks");
-    local::split_video(input, &chunk_dir, SEGMENT_LENGTH, &running)?;
+    local::split_video(
+        input,
+        &chunk_dir,
+        Duration::from_secs(seconds),
+        &running,
+    )?;
     // Get the list of created chunks
     let mut chunks = fs::read_dir(&chunk_dir)?
         .map(|res| res.and_then(|readdir| Ok(readdir.path())))
