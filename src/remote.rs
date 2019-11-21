@@ -113,6 +113,7 @@ pub fn encoder_thread(
             .args(&[
                 &host,
                 "ffmpeg",
+                "-y",
                 "-i",
                 &chunk_name,
                 "-c:v",

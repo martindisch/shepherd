@@ -9,7 +9,9 @@ pub fn extract_audio(input: &Path, output: &Path) -> Result<()> {
     let output = output.to_str().ok_or("Output invalid Unicode")?;
     // Do the extraction
     let output = Command::new("ffmpeg")
-        .args(&["-i", input, "-vn", "-c:a", "aac", "-b:a", "192k", output])
+        .args(&[
+            "-y", "-i", input, "-vn", "-c:a", "aac", "-b:a", "192k", output,
+        ])
         .output()?;
     if !output.status.success() {
         return Err("Failed extracting audio".into());
@@ -32,6 +34,7 @@ pub fn split_video(
     // Do the chunking
     let output = Command::new("ffmpeg")
         .args(&[
+            "-y",
             "-i",
             input,
             "-an",
@@ -83,6 +86,7 @@ pub fn combine(encoded_dir: &Path, audio: &Path, output: &Path) -> Result<()> {
     // Combine everything
     let output = Command::new("ffmpeg")
         .args(&[
+            "-y",
             "-f",
             "concat",
             "-safe",
