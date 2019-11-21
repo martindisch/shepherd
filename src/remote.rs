@@ -1,4 +1,5 @@
 use crossbeam::channel::{self, Receiver};
+use log::{debug, info};
 use std::{path::PathBuf, process::Command, thread};
 
 static TMP_DIR: &str = "shepherd_tmp_remote";
@@ -9,7 +10,7 @@ pub fn host_thread(
     global_receiver: Receiver<PathBuf>,
     encoded_dir: PathBuf,
 ) {
-    println!("Spawned host thread {}", host);
+    debug!("Spawned host thread {}", host);
 
     // Create temporary directory on host
     let output = Command::new("ssh")
@@ -30,7 +31,7 @@ pub fn host_thread(
 
     // Try to fetch a chunk from the global channel
     while let Ok(chunk) = global_receiver.recv() {
-        println!("Host thread {} received chunk {:?}", host, chunk);
+        debug!("Host thread {} received chunk {:?}", host, chunk);
         // Transfer chunk to host
         let output = Command::new("scp")
             .args(&[
@@ -46,11 +47,11 @@ pub fn host_thread(
     // Since the global channel is empty, drop our sender to disconnect the
     // local channel
     drop(sender);
-    println!("Host thread {} waiting for encoder to finish", host);
+    debug!("Host thread {} waiting for encoder to finish", host);
 
     // Wait for the encoder
     let encoded = handle.join().expect("Encoder thread panicked");
-    println!("Host thread {} got encoded chunks {:?}", host, encoded);
+    debug!("Host thread {} got encoded chunks {:?}", host, encoded);
 
     // Get a &str from encoded_dir PathBuf
     let encoded_dir = encoded_dir.to_str().expect("Invalid Unicode");
@@ -61,7 +62,7 @@ pub fn host_thread(
             .output()
             .expect("Failed executing scp command");
         assert!(output.status.success(), "Failed transferring encoded chunk");
-        println!("Host thread {} retrieved chunk {}", host, chunk);
+        info!("{} returned encoded chunk {}", host, chunk);
     }
 
     // Clean up temporary directory on host
@@ -73,7 +74,7 @@ pub fn host_thread(
         output.status.success(),
         "Failed removing remote temporary directory"
     );
-    println!("Host thread {} exiting", host);
+    debug!("Host thread {} exiting", host);
 }
 
 /// Encodes chunks on a host and returns the encoded remote file names.
@@ -85,7 +86,7 @@ pub fn encoder_thread(
     let mut encoded = Vec::new();
 
     while let Ok(chunk) = receiver.recv() {
-        println!("Encoder thread {} received chunk {:?}", host, chunk);
+        debug!("Encoder thread {} received chunk {:?}", host, chunk);
         // Construct the chunk's remote file name
         let chunk_name = format!(
             "{}/{}",
@@ -109,6 +110,7 @@ pub fn encoder_thread(
         );
 
         // Encode the chunk remotely
+        info!("{} starts encoding chunk {:?}", host, chunk);
         let output = Command::new("ssh")
             .args(&[
                 &host,
@@ -137,7 +139,7 @@ pub fn encoder_thread(
         // Remember the encoded chunk
         encoded.push(enc_name);
     }
-    println!("Encoder thread {} exiting", host);
+    debug!("Encoder thread {} exiting", host);
 
     encoded
 }

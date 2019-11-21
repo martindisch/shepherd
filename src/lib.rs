@@ -1,5 +1,6 @@
 use crossbeam::channel;
 use dirs;
+use log::{error, info};
 use std::{
     error::Error,
     fs,
@@ -18,7 +19,7 @@ const TMP_DIR: &str = "shepherd_tmp";
 const AUDIO: &str = "audio.aac";
 /// The length of chunks to split the video into.
 /// TODO: this is so short for testing, raise to 1 minute afterwards
-const SEGMENT_LENGTH: Duration = Duration::from_secs(10);
+const SEGMENT_LENGTH: Duration = Duration::from_secs(30);
 
 /// The generic result type for this crate.
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -58,7 +59,7 @@ pub fn run_local(
     let mut audio = tmp_dir.to_path_buf();
     audio.push(AUDIO);
     // Start the extraction
-    println!("Extracting audio");
+    info!("Extracting audio");
     local::extract_audio(input, &audio)?;
 
     // Create directory for video chunks
@@ -66,7 +67,7 @@ pub fn run_local(
     chunk_dir.push("chunks");
     fs::create_dir(&chunk_dir)?;
     // Split the video
-    println!("Splitting video into chunks");
+    info!("Splitting video into chunks");
     local::split_video(input, &chunk_dir, SEGMENT_LENGTH)?;
     // Get the list of created chunks
     let chunks = fs::read_dir(&chunk_dir)?
@@ -87,6 +88,7 @@ pub fn run_local(
     encoded_dir.push("encoded");
     fs::create_dir(&encoded_dir)?;
     // Spawn threads for hosts
+    info!("Starting remote encoding");
     let mut host_threads = Vec::with_capacity(hosts.len());
     for &host in &hosts {
         // Create owned hostname to move into the thread
@@ -105,12 +107,12 @@ pub fn run_local(
     // Wait for all hosts to finish
     for handle in host_threads {
         if let Err(e) = handle.join() {
-            println!("Thread for a host panicked: {:?}", e);
+            error!("Thread for a host panicked: {:?}", e);
         }
     }
 
     // Combine encoded chunks and audio
-    println!("Combining encoded chunks into final video");
+    info!("Combining encoded chunks into final video");
     local::combine(&encoded_dir, &audio, output)?;
 
     Ok(())

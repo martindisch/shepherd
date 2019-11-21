@@ -1,4 +1,6 @@
 use clap::{App, Arg};
+use log::error;
+use simplelog::{Config, LevelFilter, TermLogger, TerminalMode};
 use std::process;
 
 use shepherd;
@@ -36,10 +38,17 @@ fn main() {
     let output = matches.value_of("OUT").unwrap();
     let hosts = matches.value_of("clients").unwrap().split(',');
 
+    TermLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        TerminalMode::Mixed,
+    )
+    .expect("Failed initializing logger");
+
     if cfg!(debug_assertions) {
         shepherd::run(input, output, hosts.collect()).unwrap();
     } else if let Err(e) = shepherd::run(input, output, hosts.collect()) {
-        eprintln!("{}", e);
+        error!("{}", e);
         process::exit(1);
     }
 }
