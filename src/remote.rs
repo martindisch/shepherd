@@ -5,7 +5,7 @@ use log::{debug, info};
 use std::{path::PathBuf, process::Command, thread};
 
 /// The name of the temporary directory in the home directory of remote hosts.
-static TMP_DIR: &str = "shepherd_tmp_remote";
+pub static TMP_DIR: &str = "shepherd_tmp_remote";
 
 /// The parent thread managing the operations for a host.
 pub fn host_thread(
@@ -68,15 +68,6 @@ pub fn host_thread(
         info!("{} returned encoded chunk {}", host, chunk);
     }
 
-    // Clean up temporary directory on host
-    let output = Command::new("ssh")
-        .args(&[&host, "rm", "-r", TMP_DIR])
-        .output()
-        .expect("Failed executing ssh command");
-    assert!(
-        output.status.success(),
-        "Failed removing remote temporary directory"
-    );
     debug!("Host thread {} exiting", host);
 }
 

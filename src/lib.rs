@@ -8,6 +8,7 @@ use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
+    process::Command,
     thread,
     time::Duration,
 };
@@ -44,10 +45,23 @@ pub fn run(
     fs::create_dir(&tmp_dir)?;
 
     // Start the operation
-    let result = run_local(input.as_ref(), output.as_ref(), &tmp_dir, hosts);
+    let result = run_local(input.as_ref(), output.as_ref(), &tmp_dir, &hosts);
 
     // Clean up infallibly
+    info!("Cleaning up");
     // TODO: make sure this also happens when stopped with Ctrl + C
+    // Remove remote temporary directories
+    for &host in &hosts {
+        // Clean up temporary directory on host
+        let output = Command::new("ssh")
+            .args(&[&host, "rm", "-r", remote::TMP_DIR])
+            .output()
+            .expect("Failed executing ssh command");
+        if !output.status.success() {
+            error!("Failed removing remote temporary directory on {}", host);
+        }
+    }
+    // Remove local temporary directory
     fs::remove_dir_all(&tmp_dir).ok();
 
     result
@@ -61,7 +75,7 @@ fn run_local(
     input: &Path,
     output: &Path,
     tmp_dir: &Path,
-    hosts: Vec<&str>,
+    hosts: &[&str],
 ) -> Result<()> {
     // Build path to audio file
     let mut audio = tmp_dir.to_path_buf();
@@ -101,7 +115,7 @@ fn run_local(
     // Spawn threads for hosts
     info!("Starting remote encoding");
     let mut host_threads = Vec::with_capacity(hosts.len());
-    for &host in &hosts {
+    for &host in hosts {
         // Create owned hostname to move into the thread
         let host = host.to_string();
         // Clone the queue receiver for the thread
@@ -119,6 +133,7 @@ fn run_local(
     for handle in host_threads {
         if let Err(e) = handle.join() {
             error!("Thread for a host panicked: {:?}", e);
+            return Err("A host thread panicked".into());
         }
     }
 
