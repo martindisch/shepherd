@@ -9,6 +9,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
     thread,
     time::Duration,
 };
@@ -39,17 +41,33 @@ pub fn run(
     output: impl AsRef<Path>,
     hosts: Vec<&str>,
 ) -> Result<()> {
+    // Set up a shared boolean to check whether the user has aborted
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+        info!(
+            "Abort signal received. Waiting for remote encoders to finish the \
+             current chunk and quit gracefully."
+        );
+    })
+    .expect("Error setting Ctrl-C handler");
+
     // Create our local temporary directory
     let mut tmp_dir = dirs::home_dir().ok_or("Home directory not found")?;
     tmp_dir.push(TMP_DIR);
     fs::create_dir(&tmp_dir)?;
 
     // Start the operation
-    let result = run_local(input.as_ref(), output.as_ref(), &tmp_dir, &hosts);
+    let result = run_local(
+        input.as_ref(),
+        output.as_ref(),
+        &tmp_dir,
+        &hosts,
+        running.clone(),
+    );
 
-    // Clean up infallibly
     info!("Cleaning up");
-    // TODO: make sure this also happens when stopped with Ctrl + C
     // Remove remote temporary directories
     for &host in &hosts {
         // Clean up temporary directory on host
@@ -57,7 +75,13 @@ pub fn run(
             .args(&[&host, "rm", "-r", remote::TMP_DIR])
             .output()
             .expect("Failed executing ssh command");
-        if !output.status.success() {
+        // These checks for `running` are necessary, because Ctrl + C also
+        // seems to terminate the commands we launch, which means they'll
+        // return unsuccessfully. With this check we prevent an error message
+        // in this case, because that's what the user wants. Unfortunately this
+        // also means we have to litter the `running` variable almost
+        // everyhwere.
+        if !output.status.success() && running.load(Ordering::SeqCst) {
             error!("Failed removing remote temporary directory on {}", host);
         }
     }
@@ -76,13 +100,21 @@ fn run_local(
     output: &Path,
     tmp_dir: &Path,
     hosts: &[&str],
+    running: Arc<AtomicBool>,
 ) -> Result<()> {
     // Build path to audio file
     let mut audio = tmp_dir.to_path_buf();
     audio.push(AUDIO);
     // Start the extraction
     info!("Extracting audio");
-    local::extract_audio(input, &audio)?;
+    local::extract_audio(input, &audio, &running)?;
+
+    // We check whether the user has aborted before every time-intensive task.
+    // It's a better experience, but a bit ugly code-wise.
+    if !running.load(Ordering::SeqCst) {
+        // Abort early
+        return Ok(());
+    }
 
     // Create directory for video chunks
     let mut chunk_dir = tmp_dir.to_path_buf();
@@ -90,7 +122,7 @@ fn run_local(
     fs::create_dir(&chunk_dir)?;
     // Split the video
     info!("Splitting video into chunks");
-    local::split_video(input, &chunk_dir, SEGMENT_LENGTH)?;
+    local::split_video(input, &chunk_dir, SEGMENT_LENGTH, &running)?;
     // Get the list of created chunks
     let mut chunks = fs::read_dir(&chunk_dir)?
         .map(|res| res.and_then(|readdir| Ok(readdir.path())))
@@ -98,6 +130,11 @@ fn run_local(
     // Sort them so they're in order. That's not strictly necessary, but nicer
     // for the user to watch since it allows seeing the progress at a glance.
     chunks.sort();
+
+    if !running.load(Ordering::SeqCst) {
+        // Abort early
+        return Ok(());
+    }
 
     // Initialize the global channel for chunks
     let (sender, receiver) = channel::unbounded();
@@ -122,24 +159,31 @@ fn run_local(
         let thread_receiver = receiver.clone();
         // Create owned encoded_dir for the thread
         let enc = encoded_dir.clone();
+        // Create copy of running indicator for the thread
+        let r = running.clone();
         // Start it
-        let handle = thread::spawn(|| {
-            remote::host_thread(host, thread_receiver, enc);
-        });
+        let handle =
+            thread::Builder::new().name(host.clone()).spawn(|| {
+                remote::host_thread(host, thread_receiver, enc, r);
+            })?;
         host_threads.push(handle);
     }
 
     // Wait for all hosts to finish
     for handle in host_threads {
-        if let Err(e) = handle.join() {
-            error!("Thread for a host panicked: {:?}", e);
+        if handle.join().is_err() {
             return Err("A host thread panicked".into());
         }
     }
 
+    if !running.load(Ordering::SeqCst) {
+        // We aborted early
+        return Ok(());
+    }
+
     // Combine encoded chunks and audio
     info!("Combining encoded chunks into final video");
-    local::combine(&encoded_dir, &audio, output)?;
+    local::combine(&encoded_dir, &audio, output, &running)?;
 
     Ok(())
 }

@@ -1,11 +1,22 @@
 //! Functions for operations on the local host.
 
-use std::{fs, path::Path, process::Command, time::Duration};
+use std::{
+    fs,
+    path::Path,
+    process::Command,
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
+    time::Duration,
+};
 
 use super::Result;
 
 /// Uses `ffmpeg` to locally extract and encode the audio.
-pub fn extract_audio(input: &Path, output: &Path) -> Result<()> {
+pub fn extract_audio(
+    input: &Path,
+    output: &Path,
+    running: &Arc<AtomicBool>,
+) -> Result<()> {
     // Convert input and output to &str
     let input = input.to_str().ok_or("Input invalid Unicode")?;
     let output = output.to_str().ok_or("Output invalid Unicode")?;
@@ -15,7 +26,7 @@ pub fn extract_audio(input: &Path, output: &Path) -> Result<()> {
             "-y", "-i", input, "-vn", "-c:a", "aac", "-b:a", "192k", output,
         ])
         .output()?;
-    if !output.status.success() {
+    if !output.status.success() && running.load(Ordering::SeqCst) {
         return Err("Failed extracting audio".into());
     }
 
@@ -27,6 +38,7 @@ pub fn split_video(
     input: &Path,
     output_dir: &Path,
     segment_length: Duration,
+    running: &Arc<AtomicBool>,
 ) -> Result<()> {
     // Convert input and output to &str
     let input = input.to_str().ok_or("Input invalid Unicode")?;
@@ -49,7 +61,7 @@ pub fn split_video(
             output,
         ])
         .output()?;
-    if !output.status.success() {
+    if !output.status.success() && running.load(Ordering::SeqCst) {
         return Err("Failed splitting video".into());
     }
 
@@ -57,7 +69,12 @@ pub fn split_video(
 }
 
 /// Uses `ffmpeg` to locally combine the encoded chunks and audio.
-pub fn combine(encoded_dir: &Path, audio: &Path, output: &Path) -> Result<()> {
+pub fn combine(
+    encoded_dir: &Path,
+    audio: &Path,
+    output: &Path,
+    running: &Arc<AtomicBool>,
+) -> Result<()> {
     // Create list of encoded chunks
     let mut chunks = fs::read_dir(&encoded_dir)?
         .map(|res| res.and_then(|readdir| Ok(readdir.path())))
@@ -104,7 +121,7 @@ pub fn combine(encoded_dir: &Path, audio: &Path, output: &Path) -> Result<()> {
             output,
         ])
         .output()?;
-    if !output.status.success() {
+    if !output.status.success() && running.load(Ordering::SeqCst) {
         return Err("Failed combining video".into());
     }
 

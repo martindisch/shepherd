@@ -2,7 +2,13 @@
 
 use crossbeam::channel::{self, Receiver};
 use log::{debug, info};
-use std::{path::PathBuf, process::Command, thread};
+use std::{
+    path::PathBuf,
+    process::Command,
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
+    thread,
+};
 
 /// The name of the temporary directory in the home directory of remote hosts.
 pub static TMP_DIR: &str = "shepherd_tmp_remote";
@@ -12,6 +18,7 @@ pub fn host_thread(
     host: String,
     global_receiver: Receiver<PathBuf>,
     encoded_dir: PathBuf,
+    running: Arc<AtomicBool>,
 ) {
     debug!("Spawned host thread {}", host);
 
@@ -21,7 +28,7 @@ pub fn host_thread(
         .output()
         .expect("Failed executing ssh command");
     assert!(
-        output.status.success(),
+        output.status.success() || !running.load(Ordering::SeqCst),
         "Failed creating remote temporary directory"
     );
 
@@ -29,8 +36,13 @@ pub fn host_thread(
     let (sender, receiver) = channel::bounded(0);
     // Create copy of host for thread
     let host_cpy = host.clone();
+    // Create copy of running indicator for thread
+    let r = running.clone();
     // Start the encoder thread
-    let handle = thread::spawn(move || encoder_thread(host_cpy, receiver));
+    let handle = thread::Builder::new()
+        .name(format!("{}-encoder", host))
+        .spawn(move || encoder_thread(host_cpy, receiver, r))
+        .expect("Failed spawning thread");
 
     // Try to fetch a chunk from the global channel
     while let Ok(chunk) = global_receiver.recv() {
@@ -43,9 +55,17 @@ pub fn host_thread(
             ])
             .output()
             .expect("Failed executing scp command");
-        assert!(output.status.success(), "Failed transferring chunk");
-        // Pass the chunk to the encoder thread (blocks until channel empty)
-        sender.send(chunk).expect("Failed sending chunk in channel");
+        assert!(
+            output.status.success() || !running.load(Ordering::SeqCst),
+            "Failed transferring chunk"
+        );
+
+        // Pass the chunk to the encoder thread (blocks until encoder is ready
+        // to receive and fails if it terminated prematurely)
+        if sender.send(chunk).is_err() {
+            // Encoder stopped, so quit early
+            break;
+        }
     }
     // Since the global channel is empty, drop our sender to disconnect the
     // local channel
@@ -54,6 +74,11 @@ pub fn host_thread(
 
     // Wait for the encoder
     let encoded = handle.join().expect("Encoder thread panicked");
+    // Abort early if signal was sent
+    if !running.load(Ordering::SeqCst) {
+        info!("{} exiting", host);
+        return;
+    }
     debug!("Host thread {} got encoded chunks {:?}", host, encoded);
 
     // Get a &str from encoded_dir PathBuf
@@ -64,7 +89,10 @@ pub fn host_thread(
             .args(&[&format!("{}:{}", host, chunk), encoded_dir])
             .output()
             .expect("Failed executing scp command");
-        assert!(output.status.success(), "Failed transferring encoded chunk");
+        assert!(
+            output.status.success() || !running.load(Ordering::SeqCst),
+            "Failed transferring encoded chunk"
+        );
         info!("{} returned encoded chunk {}", host, chunk);
     }
 
@@ -72,11 +100,20 @@ pub fn host_thread(
 }
 
 /// Encodes chunks on a host and returns the encoded remote file names.
-fn encoder_thread(host: String, receiver: Receiver<PathBuf>) -> Vec<String> {
+fn encoder_thread(
+    host: String,
+    receiver: Receiver<PathBuf>,
+    running: Arc<AtomicBool>,
+) -> Vec<String> {
     // We'll use this to store the encoded chunks' remote file names.
     let mut encoded = Vec::new();
 
     while let Ok(chunk) = receiver.recv() {
+        // Abort early if signal was sent
+        if !running.load(Ordering::SeqCst) {
+            break;
+        }
+
         debug!("Encoder thread {} received chunk {:?}", host, chunk);
         // Construct the chunk's remote file name
         let chunk_name = format!(
@@ -125,7 +162,10 @@ fn encoder_thread(host: String, receiver: Receiver<PathBuf>) -> Vec<String> {
             ])
             .output()
             .expect("Failed executing ssh command");
-        assert!(output.status.success(), "Failed encoding");
+        assert!(
+            output.status.success() || !running.load(Ordering::SeqCst),
+            "Failed encoding"
+        );
 
         // Remember the encoded chunk
         encoded.push(enc_name);
