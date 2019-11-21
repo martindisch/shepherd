@@ -4,7 +4,11 @@ use std::{path::PathBuf, process::Command, thread};
 static TMP_DIR: &str = "shepherd_tmp_remote";
 
 /// The parent thread managing the operations for a host.
-pub fn host_thread(host: String, global_receiver: Receiver<PathBuf>) {
+pub fn host_thread(
+    host: String,
+    global_receiver: Receiver<PathBuf>,
+    encoded_dir: PathBuf,
+) {
     println!("Spawned host thread {}", host);
 
     // Create temporary directory on host
@@ -47,6 +51,18 @@ pub fn host_thread(host: String, global_receiver: Receiver<PathBuf>) {
     // Wait for the encoder
     let encoded = handle.join().expect("Encoder thread panicked");
     println!("Host thread {} got encoded chunks {:?}", host, encoded);
+
+    // Get a &str from encoded_dir PathBuf
+    let encoded_dir = encoded_dir.to_str().expect("Invalid Unicode");
+    // Transfer the encoded chunks back
+    for chunk in &encoded {
+        let output = Command::new("scp")
+            .args(&[&format!("{}:{}", host, chunk), encoded_dir])
+            .output()
+            .expect("Failed executing scp command");
+        assert!(output.status.success(), "Failed transferring encoded chunk");
+        println!("Host thread {} retrieved chunk {}", host, chunk);
+    }
 
     // Clean up temporary directory on host
     let output = Command::new("ssh")

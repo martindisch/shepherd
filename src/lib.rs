@@ -82,6 +82,10 @@ pub fn run_local(
     // Drop the sender so the channel gets disconnected
     drop(sender);
 
+    // Create directory for encoded chunks
+    let mut encoded_dir = tmp_dir.to_path_buf();
+    encoded_dir.push("encoded");
+    fs::create_dir(&encoded_dir)?;
     // Spawn threads for hosts
     let mut host_threads = Vec::with_capacity(hosts.len());
     for &host in &hosts {
@@ -89,9 +93,11 @@ pub fn run_local(
         let host = host.to_string();
         // Clone the queue receiver for the thread
         let thread_receiver = receiver.clone();
+        // Create owned encoded_dir for the thread
+        let enc = encoded_dir.clone();
         // Start it
         let handle = thread::spawn(|| {
-            remote::host_thread(host, thread_receiver);
+            remote::host_thread(host, thread_receiver, enc);
         });
         host_threads.push(handle);
     }
