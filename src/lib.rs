@@ -4,11 +4,10 @@
 //! ## Usage
 //!
 //! The prerequisites are one or more (you'll want more) computers—which we'll
-//! refer to as hosts—with `ffmpeg` installed, configured such that you can SSH
-//! into them using just their hostnames. In practice, this means you'll have
-//! to set up your `.ssh/config` and `ssh-copy-id` your public key to the
-//! machines. I only tested it on Linux, but if you manage to set up `ffmpeg`
-//! and SSH, it might work on macOS or Windows directly or with little
+//! refer to as hosts—with `ffmpeg` installed and configured such that you can
+//! SSH into them directly. This means you'll have to `ssh-copy-id` your public
+//! key to them. I only tested it on Linux, but if you manage to set up
+//! `ffmpeg` and SSH, it might work on macOS or Windows directly or with little
 //! modification.
 //!
 //! The usage is pretty straightforward:
@@ -63,11 +62,95 @@
 //! 7. All remote and the local temporary directory are removed.
 //!
 //! Thanks to the work stealing method of distribution, having some hosts that
-//! are significantly slower than others does not necessarily delay the overall
-//! operation. In the worst case, the slowest machine is the last to start
-//! encoding a chunk and remains the only working encoder for the duration it
-//! takes to encode this one chunk. This window can easily be reduced by using
-//! smaller chunks.
+//! are significantly slower than others does not delay the overall operation.
+//! In the worst case, the slowest machine is the last to start encoding a
+//! chunk and remains the only working encoder for the duration it takes to
+//! encode this one chunk. This window can easily be reduced by using smaller
+//! chunks.
+//!
+//! ## Performance
+//!
+//! As with all things parallel, Amdahl's law rears its ugly head and you don't
+//! just get twice the speed with twice the processing power. With this
+//! approach, you pay for having to split the video into chunks before you
+//! begin, transferring them to the encoders and the results back, and
+//! reassembling them. Although I should clarify that transferring the chunks
+//! to the encoders only causes a noticeable delay until every encoder has its
+//! first chunk, the subsequent ones can be sent while the encoders are working
+//! so they don't waste time waiting for that. And returning and assembling the
+//! encoded chunks doesn't carry too big of a penalty, since we're dealing with
+//! much more compressed data then.
+//!
+//! To get a better understanding of the tradeoffs, I did some testing with the
+//! computers I had access to. They were my main, pretty capable desktop, two
+//! older ones and a laptop. To figure out how capable each of them is so we
+//! can compare the actual to the expected speedup, I let each of them encode a
+//! relatively short clip of slightly less than 4 minutes taken from the real
+//! video I want to encode, using the same settings I'd use for the real job.
+//! And if you're wondering why encoding takes so long, it's because I'm using
+//! the `veryslow` preset for maximum efficiency, even though it's definitely
+//! not worth the huge increase in encoding time. But it's a nice simulation
+//! for how it would look if we were using an even more demanding codec like
+//! AV1.
+//!
+//! | machine   | duration (s) | power    |
+//! | --------- | ------------ | -------- |
+//! | desktop   | 1373         | 1.000    |
+//! | old1      | 2571         | 0.53     |
+//! | old2      | 3292         | 0.42     |
+//! | laptop    | 5572         | 0.25     |
+//! | **total** | -            | **2.20** |
+//!
+//! By giving my desktop the "power" level 1, we can determine how powerful the
+//! others are at this encoding task, based on how long it takes them in
+//! comparison. By adding the three other, less capable machines to the mix, we
+//! slightly more than double the theoretical encoding capability of our
+//! system.
+//!
+//! I determined these power levels on a short clip, because encoding the full
+//! video would have taken very long on the less capable ones, especially the
+//! laptop. But I still needed to encode the full thing on at least one of them
+//! to make the comparison to the distributed encoding. I did that on my
+//! desktop since it's the fastest one, and to additionally verify that the
+//! power levels hold up for the full video, I bit the bullet and did the same
+//! on the second most powerful machine.
+//!
+//! | machine | duration (s)  | power |
+//! | ------- | ------------- | ----- |
+//! | desktop | 9356          | 1.00  |
+//! | old1    | 17690         | 0.53  |
+//!
+//! Now we have the baseline we want to beat with parallel encoding, as well as
+//! confirmation that the power levels are valid for the full video. Let's see
+//! how much of the theoretical, but unreachable 2.2x speedup we can get.
+//!
+//! Encoding the video in parallel took 5283 seconds, so 56.5% of the time
+//! using my fastest computer, or a 1.77x speedup. We committed about twice the
+//! computing power and we're not too far off that two times speedup. It's
+//! making use of the additionally available resources with an 80% efficiency
+//! in this case. I also tried to encode the short clip in parallel, which was
+//! very fast, but had a somewhat disappointing speedup of only 1.32x. I
+//! suspect that we get better results with longer videos, since encoding a
+//! chunk always takes longer than creating and transferring it (otherwise
+//! distributing wouldn't make sense at all). The longer the video then, the
+//! larger the ratio of encoding (which we can parallelize) in the total amount
+//! of time the process takes, and the more effective doing so becomes.
+//!
+//! A final observation has to do with how the work is distributed over the
+//! nodes, depending on their processing power. At the end of a parallel
+//! encode, it's possible to determine how many chunks have been encoded by any
+//! given host.
+//!
+//! | host          | chunks | power |
+//! | ------------- | ------ | ----- |
+//! | desktop       | 73     | 1.00  |
+//! | old1          | 39     | 0.53  |
+//! | old2          | 31     | 0.42  |
+//! | laptop        | 19     | 0.26  |
+//!
+//! Inferring the processing power from the number of chunks leads to almost
+//! exactly the same results as my initial determination, confirming it and
+//! proving that work is distributed efficiently.
 //!
 //! ## Limitations
 //!
@@ -76,14 +159,11 @@
 //! to change the `ffmpeg` commands to support other formats though, and in
 //! fact making it so that the user can supply arbitrary arguments to the
 //! `ffmpeg` processing through the CLI is a pretty low-hanging fruit and I'm
-//! interested in that if I find the time.
-//!
-//! As with all things parallel, Amdahl's law hits hard and you don't get twice
-//! the speed with twice the processing power. With this approach, you pay for
-//! having to split the video into chunks before you begin, transferring them
-//! to the encoders and the results back, and reassembling them. But if your
-//! system I/O (both disk and network) is good and you spend a lot of time
-//! encoding (e.g. slow preset for H.264), it's still worth it.
+//! interested in doing that if I find the time. That would be a pretty big
+//! win, since it would allow for using this on any format that `ffmpeg`
+//! supports and which can be losslessly split and concatenated. If you want to
+//! use this and have problems or think about contributing, let me know by
+//! opening an issue and I'll do my best to help.
 
 use crossbeam::channel;
 use dirs;
