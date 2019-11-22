@@ -27,6 +27,7 @@ FLAGS:
 OPTIONS:
     -c, --clients <hostnames>    Comma-separated list of encoding hosts
     -l, --length <seconds>       The length of video chunks in seconds
+    -t, --tmp <path>             The path to the local temporary directory
 
 ARGS:
     <IN>     The original video file

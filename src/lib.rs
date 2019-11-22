@@ -23,6 +23,7 @@
 //! OPTIONS:
 //!     -c, --clients <hostnames>    Comma-separated list of encoding hosts
 //!     -l, --length <seconds>       The length of video chunks in seconds
+//!     -t, --tmp <path>             The path to the local temporary directory
 //!
 //! ARGS:
 //!     <IN>     The original video file
@@ -106,6 +107,8 @@ mod remote;
 const TMP_DIR: &str = "shepherd_tmp";
 /// The name of the encoded audio track.
 const AUDIO: &str = "audio.aac";
+/// The length of chunks to split the video into.
+const DEFAULT_LENGTH: &str = "60";
 
 /// The generic result type for this crate.
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -117,14 +120,21 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 /// * `output` - The path to the output file.
 /// * `hosts` - Comma-separated list of hosts.
 /// * `seconds` - The video chunk length.
+/// * `tmp_dir` - The path to the local temporary directory.
 pub fn run(
     input: impl AsRef<Path>,
     output: impl AsRef<Path>,
     hosts: Vec<&str>,
-    seconds: &str,
+    seconds: Option<&str>,
+    tmp_dir: Option<&str>,
 ) -> Result<()> {
     // Convert the length
-    let seconds = seconds.parse::<u64>()?;
+    let seconds = seconds.unwrap_or(DEFAULT_LENGTH).parse::<u64>()?;
+    // Convert the tmp_dir
+    let mut tmp_dir = tmp_dir
+        .map(PathBuf::from)
+        .or_else(dirs::home_dir)
+        .ok_or("Home directory not found")?;
 
     // Set up a shared boolean to check whether the user has aborted
     let running = Arc::new(AtomicBool::new(true));
@@ -139,7 +149,6 @@ pub fn run(
     .expect("Error setting Ctrl-C handler");
 
     // Create our local temporary directory
-    let mut tmp_dir = dirs::home_dir().ok_or("Home directory not found")?;
     tmp_dir.push(TMP_DIR);
     fs::create_dir(&tmp_dir)?;
 

@@ -31,6 +31,14 @@ fn main() {
                 .help("The length of video chunks in seconds"),
         )
         .arg(
+            Arg::with_name("tmp")
+                .short("t")
+                .long("tmp")
+                .value_name("path")
+                .takes_value(true)
+                .help("The path to the local temporary directory"),
+        )
+        .arg(
             Arg::with_name("IN")
                 .help("The original video file")
                 .required(true),
@@ -45,7 +53,8 @@ fn main() {
     let input = matches.value_of("IN").unwrap();
     let output = matches.value_of("OUT").unwrap();
     let hosts = matches.value_of("clients").unwrap().split(',');
-    let seconds = matches.value_of("length").unwrap_or("60");
+    let seconds = matches.value_of("length");
+    let tmp = matches.value_of("tmp");
 
     TermLogger::init(
         LevelFilter::Info,
@@ -55,9 +64,9 @@ fn main() {
     .expect("Failed initializing logger");
 
     if cfg!(debug_assertions) {
-        shepherd::run(input, output, hosts.collect(), seconds).unwrap();
+        shepherd::run(input, output, hosts.collect(), seconds, tmp).unwrap();
     } else if let Err(e) =
-        shepherd::run(input, output, hosts.collect(), seconds)
+        shepherd::run(input, output, hosts.collect(), seconds, tmp)
     {
         error!("{}", e);
         process::exit(1);
