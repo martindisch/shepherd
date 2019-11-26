@@ -1,6 +1,19 @@
 //! A distributed video encoder that splits files into chunks to encode them on
 //! multiple machines in parallel.
 //!
+//! ## Installation
+//!
+//! Using Cargo, you can do
+//! ```console
+//! $ cargo install shepherd
+//! ```
+//! or just clone the repository and compile the binary with
+//! ```console
+//! $ git clone https://github.com/martindisch/shepherd
+//! $ cd shepherd
+//! $ cargo build --release
+//! ```
+//!
 //! ## Usage
 //!
 //! The prerequisites are one or more (you'll want more) computers—which we'll
