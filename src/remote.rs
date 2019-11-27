@@ -149,7 +149,7 @@ fn encoder_thread(
                 "-c:v",
                 "libx264",
                 "-crf",
-                "22",
+                "26",
                 "-preset",
                 "veryslow",
                 "-profile:v",
