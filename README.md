@@ -1,5 +1,9 @@
 # shepherd
 
+[![Latest version](https://img.shields.io/crates/v/shepherd)](https://crates.io/crates/shepherd)
+[![Documentation](https://docs.rs/shepherd/badge.svg)](https://docs.rs/shepherd)
+[![License](https://img.shields.io/crates/l/shepherd)](https://github.com/martindisch/shepherd#license)
+
 <!-- cargo-sync-readme start -->
 
 A distributed video encoder that splits files into chunks to encode them on
