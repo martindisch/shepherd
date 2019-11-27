@@ -98,17 +98,17 @@ so they don't waste time waiting for that. And returning and assembling the
 encoded chunks doesn't carry too big of a penalty, since we're dealing with
 much more compressed data then.
 
-To get a better understanding of the tradeoffs, I did some testing with the
-computers I had access to. They were my main, pretty capable desktop, two
-older ones and a laptop. To figure out how capable each of them is so we
-can compare the actual to the expected speedup, I let each of them encode a
-relatively short clip of slightly less than 4 minutes taken from the real
-video I want to encode, using the same settings I'd use for the real job.
-And if you're wondering why encoding takes so long, it's because I'm using
-the `veryslow` preset for maximum efficiency, even though it's definitely
-not worth the huge increase in encoding time. But it's a nice simulation
-for how it would look if we were using an even more demanding codec like
-AV1.
+To get a better understanding of the tradeoffs, I did some testing with a
+couple of computers I had access to. They were my main, pretty capable
+desktop, two older ones and a laptop. To figure out how capable each of
+them is so we can compare the actual to the expected speedup, I let each of
+them encode a relatively short clip of slightly less than 4 minutes taken
+from the real video I want to encode, using the same settings I'd use for
+the real job. And if you're wondering why encoding takes so long, it's
+because I'm using the `veryslow` preset for maximum efficiency, even though
+it's definitely not worth the huge increase in encoding time. But it's a
+nice simulation for how it would look if we were using an even more
+demanding codec like AV1.
 
 | machine   | duration (s) | power    |
 | --------- | ------------ | -------- |
@@ -153,10 +153,9 @@ distributing wouldn't make sense at all). The longer the video then, the
 larger the ratio of encoding (which we can parallelize) in the total amount
 of time the process takes, and the more effective doing so becomes.
 
-A final observation has to do with how the work is distributed over the
-nodes, depending on their processing power. At the end of a parallel
-encode, it's possible to determine how many chunks have been encoded by any
-given host.
+I've also looked at how the work is distributed over the nodes, depending
+on their processing power. At the end of a parallel encode, it's possible
+to determine how many chunks have been encoded by any given host.
 
 | host          | chunks | power |
 | ------------- | ------ | ----- |
@@ -168,6 +167,26 @@ given host.
 Inferring the processing power from the number of chunks leads to almost
 exactly the same results as my initial determination, confirming it and
 proving that work is distributed efficiently.
+
+To further see how the system scales, I've added two more machines,
+bringing the total processing power up to 3.29.
+
+| machine   | duration (s) | power    |
+| --------- | ------------ | -------- |
+| desktop   | 1373         | 1.00     |
+| c1        | 2129         | 0.64     |
+| old1      | 2571         | 0.53     |
+| c2        | 3022         | 0.45     |
+| old2      | 3292         | 0.42     |
+| laptop    | 5572         | 0.25     |
+| **total** | -            | **3.29** |
+
+Encoding the video on these 6 machines in parallel took 3865 seconds, so
+41.3% of the time using my fastest computer, or a 2.42x speedup. It's
+making use of the additionally available resources with a 74% efficiency
+here. As expected, while we can accelerate by adding more resources, we're
+looking at diminishing returns. Although the factor by which the efficiency
+decreases is not as bad as it could be.
 
 ## Limitations
 
