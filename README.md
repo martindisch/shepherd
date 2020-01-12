@@ -34,10 +34,11 @@ modification.
 The usage is pretty straightforward:
 ```text
 USAGE:
-    shepherd [OPTIONS] <IN> <OUT> --clients <hostnames>
+    shepherd [FLAGS] [OPTIONS] <IN> <OUT> --clients <hostnames>
 
 FLAGS:
     -h, --help       Prints help information
+    -k, --keep       Don't clean up temporary files on encoding hosts
     -V, --version    Prints version information
 
 OPTIONS:

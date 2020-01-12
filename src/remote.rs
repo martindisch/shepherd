@@ -22,6 +22,18 @@ pub fn host_thread(
 ) {
     debug!("Spawned host thread {}", host);
 
+    // Clean up temporary directory on host. This is necessary, because it's
+    // possible that the user ran with the --keep flag before. While our
+    // application wouldn't get confused by old chunks lying around (they're
+    // overwritten and those that aren't are disregarded, because it keeps
+    // track of its chunks), we don't want the user to get the wrong idea.
+    // Also, we don't care if this fails, because if it did then the directory
+    // didn't exist anyway.
+    Command::new("ssh")
+        .args(&[&host, "rm", "-r", crate::remote::TMP_DIR])
+        .output()
+        .expect("Failed executing ssh command");
+
     // Create temporary directory on host
     let output = Command::new("ssh")
         .args(&[&host, "mkdir", TMP_DIR])

@@ -39,6 +39,12 @@ fn main() {
                 .help("The path to the local temporary directory"),
         )
         .arg(
+            Arg::with_name("keep")
+                .short("k")
+                .long("keep")
+                .help("Don't clean up temporary files on encoding hosts"),
+        )
+        .arg(
             Arg::with_name("IN")
                 .help("The original video file")
                 .required(true),
@@ -55,6 +61,7 @@ fn main() {
     let hosts = matches.value_of("clients").unwrap().split(',');
     let seconds = matches.value_of("length");
     let tmp = matches.value_of("tmp");
+    let keep = matches.is_present("keep");
 
     TermLogger::init(
         LevelFilter::Info,
@@ -64,9 +71,10 @@ fn main() {
     .expect("Failed initializing logger");
 
     if cfg!(debug_assertions) {
-        shepherd::run(input, output, hosts.collect(), seconds, tmp).unwrap();
+        shepherd::run(input, output, hosts.collect(), seconds, tmp, keep)
+            .unwrap();
     } else if let Err(e) =
-        shepherd::run(input, output, hosts.collect(), seconds, tmp)
+        shepherd::run(input, output, hosts.collect(), seconds, tmp, keep)
     {
         error!("{}", e);
         process::exit(1);

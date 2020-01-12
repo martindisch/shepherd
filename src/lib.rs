@@ -26,10 +26,11 @@
 //! The usage is pretty straightforward:
 //! ```text
 //! USAGE:
-//!     shepherd [OPTIONS] <IN> <OUT> --clients <hostnames>
+//!     shepherd [FLAGS] [OPTIONS] <IN> <OUT> --clients <hostnames>
 //!
 //! FLAGS:
 //!     -h, --help       Prints help information
+//!     -k, --keep       Don't clean up temporary files on encoding hosts
 //!     -V, --version    Prints version information
 //!
 //! OPTIONS:
@@ -233,12 +234,14 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 /// * `hosts` - Comma-separated list of hosts.
 /// * `seconds` - The video chunk length.
 /// * `tmp_dir` - The path to the local temporary directory.
+/// * `keep` - Whether to keep temporary files on hosts (no cleanup).
 pub fn run(
     input: impl AsRef<Path>,
     output: impl AsRef<Path>,
     hosts: Vec<&str>,
     seconds: Option<&str>,
     tmp_dir: Option<&str>,
+    keep: bool,
 ) -> Result<()> {
     // Convert the length
     let seconds = seconds.unwrap_or(DEFAULT_LENGTH).parse::<u64>()?;
@@ -274,25 +277,31 @@ pub fn run(
         running.clone(),
     );
 
-    info!("Cleaning up");
-    // Remove remote temporary directories
-    for &host in &hosts {
-        // Clean up temporary directory on host
-        let output = Command::new("ssh")
-            .args(&[&host, "rm", "-r", remote::TMP_DIR])
-            .output()
-            .expect("Failed executing ssh command");
-        // These checks for `running` are necessary, because Ctrl + C also
-        // seems to terminate the commands we launch, which means they'll
-        // return unsuccessfully. With this check we prevent an error message
-        // in this case, because that's what the user wants. Unfortunately this
-        // also means we have to litter the `running` variable almost
-        // everyhwere.
-        if !output.status.success() && running.load(Ordering::SeqCst) {
-            error!("Failed removing remote temporary directory on {}", host);
+    if !keep {
+        // Remove remote temporary directories
+        info!("Cleaning up on hosts");
+        for &host in &hosts {
+            // Clean up temporary directory on host
+            let output = Command::new("ssh")
+                .args(&[&host, "rm", "-r", remote::TMP_DIR])
+                .output()
+                .expect("Failed executing ssh command");
+            // These checks for `running` are necessary, because Ctrl + C also
+            // seems to terminate the commands we launch, which means they'll
+            // return unsuccessfully. With this check we prevent an error
+            // message in this case, because that's what the user wants.
+            // Unfortunately this also means we have to litter the `running`
+            // variable almost everyhwere.
+            if !output.status.success() && running.load(Ordering::SeqCst) {
+                error!(
+                    "Failed removing remote temporary directory on {}",
+                    host
+                );
+            }
         }
     }
     // Remove local temporary directory
+    info!("Cleaning up on local");
     fs::remove_dir_all(&tmp_dir).ok();
 
     result
