@@ -263,8 +263,10 @@ pub fn run(
     })
     .expect("Error setting Ctrl-C handler");
 
-    // Create our local temporary directory
     tmp_dir.push(TMP_DIR);
+    // Remove local temporary directory in case it's still around
+    fs::remove_dir_all(&tmp_dir).ok();
+    // Create our local temporary directory
     fs::create_dir(&tmp_dir)?;
 
     // Start the operation
