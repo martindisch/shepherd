@@ -30,7 +30,7 @@
 //!
 //! FLAGS:
 //!     -h, --help       Prints help information
-//!     -k, --keep       Don't clean up temporary files on encoding hosts
+//!     -k, --keep       Don't clean up temporary files
 //!     -V, --version    Prints version information
 //!
 //! OPTIONS:
@@ -278,8 +278,8 @@ pub fn run(
     );
 
     if !keep {
+        info!("Cleaning up");
         // Remove remote temporary directories
-        info!("Cleaning up on hosts");
         for &host in &hosts {
             // Clean up temporary directory on host
             let output = Command::new("ssh")
@@ -299,10 +299,9 @@ pub fn run(
                 );
             }
         }
+        // Remove local temporary directory
+        fs::remove_dir_all(&tmp_dir).ok();
     }
-    // Remove local temporary directory
-    info!("Cleaning up on local");
-    fs::remove_dir_all(&tmp_dir).ok();
 
     result
 }

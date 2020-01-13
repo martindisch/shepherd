@@ -42,7 +42,7 @@ fn main() {
             Arg::with_name("keep")
                 .short("k")
                 .long("keep")
-                .help("Don't clean up temporary files on encoding hosts"),
+                .help("Don't clean up temporary files"),
         )
         .arg(
             Arg::with_name("IN")

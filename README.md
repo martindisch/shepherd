@@ -38,7 +38,7 @@ USAGE:
 
 FLAGS:
     -h, --help       Prints help information
-    -k, --keep       Don't clean up temporary files on encoding hosts
+    -k, --keep       Don't clean up temporary files
     -V, --version    Prints version information
 
 OPTIONS:
