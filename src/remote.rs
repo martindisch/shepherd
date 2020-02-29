@@ -19,6 +19,7 @@ pub fn host_thread(
     global_receiver: Receiver<PathBuf>,
     encoded_dir: PathBuf,
     out_ext: String,
+    args: Arc<Vec<String>>,
     running: Arc<AtomicBool>,
 ) {
     debug!("Spawned host thread {}", host);
@@ -49,12 +50,13 @@ pub fn host_thread(
     let (sender, receiver) = channel::bounded(0);
     // Create copy of host for thread
     let host_cpy = host.clone();
-    // Create copy of running indicator for thread
-    let r = running.clone();
+    // Increase reference counts for Arcs
+    let r = Arc::clone(&running);
+    let a = Arc::clone(&args);
     // Start the encoder thread
     let handle = thread::Builder::new()
         .name(format!("{}-encoder", host))
-        .spawn(move || encoder_thread(host_cpy, out_ext, receiver, r))
+        .spawn(move || encoder_thread(host_cpy, out_ext, a, receiver, r))
         .expect("Failed spawning thread");
 
     // Try to fetch a chunk from the global channel
@@ -116,6 +118,7 @@ pub fn host_thread(
 fn encoder_thread(
     host: String,
     out_ext: String,
+    args: Arc<Vec<String>>,
     receiver: Receiver<PathBuf>,
     running: Arc<AtomicBool>,
 ) -> Vec<String> {
@@ -151,29 +154,16 @@ fn encoder_thread(
             out_ext
         );
 
+        // Build the ffmpeg command
+        let mut command: Vec<&str> =
+            vec![&host, "ffmpeg", "-y", "-i", &chunk_name];
+        command.extend(args.iter().map(|s| s.as_str()));
+        command.push(&enc_name);
+
         // Encode the chunk remotely
         info!("{} starts encoding chunk {:?}", host, chunk);
         let output = Command::new("ssh")
-            .args(&[
-                &host,
-                "ffmpeg",
-                "-y",
-                "-i",
-                &chunk_name,
-                "-c:v",
-                "libx264",
-                "-crf",
-                "26",
-                "-preset",
-                "veryslow",
-                "-profile:v",
-                "high",
-                "-level",
-                "4.2",
-                "-pix_fmt",
-                "yuv420p",
-                &enc_name,
-            ])
+            .args(&command)
             .output()
             .expect("Failed executing ssh command");
         assert!(

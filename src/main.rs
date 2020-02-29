@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use log::error;
 use simplelog::{ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 use std::process;
@@ -13,6 +13,7 @@ fn main() {
              for multiple machines.",
         )
         .author(clap::crate_authors!())
+        .setting(AppSettings::TrailingVarArg)
         .arg(
             Arg::with_name("clients")
                 .short("c")
@@ -54,6 +55,24 @@ fn main() {
                 .help("The output video file")
                 .required(true),
         )
+        .arg(
+            Arg::with_name("ffmpeg")
+                .value_name("FFMPEG OPTIONS")
+                .multiple(true)
+                .help(
+                    "Options/flags for ffmpeg encoding of chunks. The\n\
+                     chunks are video only, so don't pass in anything\n\
+                     concerning audio. Input/output file names are added\n\
+                     by the application, so there is no need for that\n\
+                     either. This is the last positional argument and\n\
+                     needs to be preceeded by double hypens (--) as in:\n\
+                     shepherd -c c1,c2 in.mp4 out.mp4 -- -c:v libx264\n\
+                     -crf 26 -preset veryslow -profile:v high -level 4.2\n\
+                     -pix_fmt yuv420p\n\
+                     This is also the default that is used if no options\n\
+                     are provided.",
+                ),
+        )
         .get_matches();
     // If we get here, unwrap is safe on mandatory arguments
     let input = matches.value_of("IN").unwrap();
@@ -62,6 +81,26 @@ fn main() {
     let seconds = matches.value_of("length");
     let tmp = matches.value_of("tmp");
     let keep = matches.is_present("keep");
+    // Take the given arguments for ffmpeg or use the defaults
+    let args: Vec<&str> = matches
+        .values_of("ffmpeg")
+        .map(|a| a.collect())
+        .unwrap_or_else(|| {
+            vec![
+                "-c:v",
+                "libx264",
+                "-crf",
+                "26",
+                "-preset",
+                "veryslow",
+                "-profile:v",
+                "high",
+                "-level",
+                "4.2",
+                "-pix_fmt",
+                "yuv420p",
+            ]
+        });
 
     TermLogger::init(
         LevelFilter::Info,
@@ -71,11 +110,25 @@ fn main() {
     .expect("Failed initializing logger");
 
     if cfg!(debug_assertions) {
-        shepherd::run(input, output, hosts.collect(), seconds, tmp, keep)
-            .unwrap();
-    } else if let Err(e) =
-        shepherd::run(input, output, hosts.collect(), seconds, tmp, keep)
-    {
+        shepherd::run(
+            input,
+            output,
+            &args,
+            hosts.collect(),
+            seconds,
+            tmp,
+            keep,
+        )
+        .unwrap();
+    } else if let Err(e) = shepherd::run(
+        input,
+        output,
+        &args,
+        hosts.collect(),
+        seconds,
+        tmp,
+        keep,
+    ) {
         error!("{}", e);
         process::exit(1);
     }

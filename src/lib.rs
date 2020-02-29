@@ -206,6 +206,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    string::ToString,
     sync::atomic::{AtomicBool, Ordering},
     sync::Arc,
     thread,
@@ -231,6 +232,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 /// # Arguments
 /// * `input` - The path to the input file.
 /// * `output` - The path to the output file.
+/// * `args` - Arguments to `ffmpeg` for chunk encoding.
 /// * `hosts` - Comma-separated list of hosts.
 /// * `seconds` - The video chunk length.
 /// * `tmp_dir` - The path to the local temporary directory.
@@ -238,6 +240,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 pub fn run(
     input: impl AsRef<Path>,
     output: impl AsRef<Path>,
+    args: &[&str],
     hosts: Vec<&str>,
     seconds: Option<&str>,
     tmp_dir: Option<&str>,
@@ -253,7 +256,7 @@ pub fn run(
 
     // Set up a shared boolean to check whether the user has aborted
     let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
+    let r = Arc::clone(&running);
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
         info!(
@@ -273,10 +276,11 @@ pub fn run(
     let result = run_local(
         input.as_ref(),
         output.as_ref(),
+        args,
         &tmp_dir,
         &hosts,
         seconds,
-        running.clone(),
+        Arc::clone(&running),
     );
 
     if !keep {
@@ -315,6 +319,7 @@ pub fn run(
 fn run_local(
     input: &Path,
     output: &Path,
+    args: &[&str],
     tmp_dir: &Path,
     hosts: &[&str],
     seconds: u64,
@@ -368,6 +373,12 @@ fn run_local(
     // Drop the sender so the channel gets disconnected
     drop(sender);
 
+    // Since we want to share the ffmpeg arguments between the threads, we need
+    // to first set up an owned version of them
+    let args: Vec<String> = args.iter().map(ToString::to_string).collect();
+    // and then create our Arc
+    let args = Arc::new(args);
+
     // Create directory for encoded chunks
     let mut encoded_dir = tmp_dir.to_path_buf();
     encoded_dir.push("encoded");
@@ -383,20 +394,20 @@ fn run_local(
     info!("Starting remote encoding");
     let mut host_threads = Vec::with_capacity(hosts.len());
     for &host in hosts {
-        // Create owned hostname to move into the thread
-        let host = host.to_string();
         // Clone the queue receiver for the thread
         let thread_receiver = receiver.clone();
-        // Create owned encoded_dir for the thread
-        let enc = encoded_dir.clone();
-        // Same for output extension
-        let ext = out_ext.clone();
         // Create copy of running indicator for the thread
-        let r = running.clone();
+        let r = Arc::clone(&running);
+        // And lots of other copies because it's easy and the extra allocations
+        // are not a problem for this kind of application
+        let host = host.to_string();
+        let enc = encoded_dir.clone();
+        let ext = out_ext.clone();
+        let a = Arc::clone(&args);
         // Start it
         let handle =
             thread::Builder::new().name(host.clone()).spawn(|| {
-                remote::host_thread(host, thread_receiver, enc, ext, r);
+                remote::host_thread(host, thread_receiver, enc, ext, a, r);
             })?;
         host_threads.push(handle);
     }
