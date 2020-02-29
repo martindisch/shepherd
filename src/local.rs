@@ -40,10 +40,16 @@ pub fn split_video(
     segment_length: Duration,
     running: &Arc<AtomicBool>,
 ) -> Result<()> {
+    // Isolate file extension, since we want the chunks to have the same
+    let extension = input
+        .extension()
+        .ok_or("Unable to find extension")?
+        .to_str()
+        .ok_or("Unable to convert OsString extension")?;
     // Convert input and output to &str
     let input = input.to_str().ok_or("Input invalid Unicode")?;
     let mut output_dir = output_dir.to_path_buf();
-    output_dir.push("chunk_%03d.mxf");
+    output_dir.push(format!("chunk_%03d.{}", extension));
     let output = output_dir.to_str().ok_or("Output invalid Unicode")?;
     // Do the chunking
     let output = Command::new("ffmpeg")
