@@ -21,6 +21,9 @@ $ git clone https://github.com/martindisch/shepherd
 $ cd shepherd
 $ cargo build --release
 ```
+There's also a
+[direct download](https://github.com/martindisch/shepherd/releases/latest/download/shepherd)
+for the latest x86-64 ELF binary.
 
 ## Usage
 
@@ -34,7 +37,7 @@ modification.
 The usage is pretty straightforward:
 ```text
 USAGE:
-    shepherd [FLAGS] [OPTIONS] <IN> <OUT> --clients <hostnames>
+    shepherd [FLAGS] [OPTIONS] <IN> <OUT> --clients <hostnames> [FFMPEG OPTIONS]...
 
 FLAGS:
     -h, --help       Prints help information
@@ -47,16 +50,33 @@ OPTIONS:
     -t, --tmp <path>             The path to the local temporary directory
 
 ARGS:
-    <IN>     The original video file
-    <OUT>    The output video file
+    <IN>                   The original video file
+    <OUT>                  The output video file
+    <FFMPEG OPTIONS>...    Options/flags for ffmpeg encoding of chunks. The
+                           chunks are video only, so don't pass in anything
+                           concerning audio. Input/output file names are added
+                           by the application, so there is no need for that
+                           either. This is the last positional argument and
+                           needs to be preceeded by double hypens (--) as in:
+                           shepherd -c c1,c2 in.mp4 out.mp4 -- -c:v libx264
+                           -crf 26 -preset veryslow -profile:v high -level 4.2
+                           -pix_fmt yuv420p
+                           This is also the default that is used if no options
+                           are provided.
 ```
 
 So if we have three machines c1, c2 and c3, we could do
 ```console
-$ shepherd -c c1,c2,c3 -l 30 source_file.mxf output_file.mp4
+$ shepherd -c c1,c2,c3 -l 30 source_file.mp4 output_file.mp4
 ```
 to have it split the video in roughly 30 second chunks and encode them in
-parallel.
+parallel. By default it encodes in H.264 with a CRF value of 26 and the
+`veryslow` preset. If you want to supply your own `ffmpeg` options for more
+control over the codec, you can do so by adding them to the end of the
+invocation:
+```console
+$ shepherd -c c1,c2 input.mkv output.mp4 -- -c:v libx264 -crf 40
+```
 
 ## How it works
 
@@ -195,16 +215,9 @@ decreases is not as bad as it could be.
 
 ## Limitations
 
-Currently this is tailored to my use case, which is encoding large MXF
-files containing DNxHD to MP4s with H.264 and AAC streams. It's fairly easy
-to change the `ffmpeg` commands to support other formats though, and in
-fact making it so that the user can supply arbitrary arguments to the
-`ffmpeg` processing through the CLI is a pretty low-hanging fruit and I'm
-interested in doing that if I find the time. That would be a pretty big
-win, since it would allow for using this on any format that `ffmpeg`
-supports and which can be losslessly split and concatenated. If you want to
-use this and have problems or think about contributing, let me know by
-opening an issue and I'll do my best to help.
+While you can use your own `ffmpeg` options to control how the video is
+encoded, there is currently no such option for the audio, which is 192 kb/s
+AAC by default.
 
 <!-- cargo-sync-readme end -->
 
