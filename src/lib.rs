@@ -372,6 +372,13 @@ fn run_local(
     let mut encoded_dir = tmp_dir.to_path_buf();
     encoded_dir.push("encoded");
     fs::create_dir(&encoded_dir)?;
+    // Isolate output extension, since we want encoded chunks to have the same
+    let out_ext = output
+        .extension()
+        .ok_or("Unable to find extension")?
+        .to_str()
+        .ok_or("Unable to convert OsString extension")?
+        .to_string();
     // Spawn threads for hosts
     info!("Starting remote encoding");
     let mut host_threads = Vec::with_capacity(hosts.len());
@@ -382,12 +389,14 @@ fn run_local(
         let thread_receiver = receiver.clone();
         // Create owned encoded_dir for the thread
         let enc = encoded_dir.clone();
+        // Same for output extension
+        let ext = out_ext.clone();
         // Create copy of running indicator for the thread
         let r = running.clone();
         // Start it
         let handle =
             thread::Builder::new().name(host.clone()).spawn(|| {
-                remote::host_thread(host, thread_receiver, enc, r);
+                remote::host_thread(host, thread_receiver, enc, ext, r);
             })?;
         host_threads.push(handle);
     }

@@ -18,6 +18,7 @@ pub fn host_thread(
     host: String,
     global_receiver: Receiver<PathBuf>,
     encoded_dir: PathBuf,
+    out_ext: String,
     running: Arc<AtomicBool>,
 ) {
     debug!("Spawned host thread {}", host);
@@ -53,7 +54,7 @@ pub fn host_thread(
     // Start the encoder thread
     let handle = thread::Builder::new()
         .name(format!("{}-encoder", host))
-        .spawn(move || encoder_thread(host_cpy, receiver, r))
+        .spawn(move || encoder_thread(host_cpy, out_ext, receiver, r))
         .expect("Failed spawning thread");
 
     // Try to fetch a chunk from the global channel
@@ -114,6 +115,7 @@ pub fn host_thread(
 /// Encodes chunks on a host and returns the encoded remote file names.
 fn encoder_thread(
     host: String,
+    out_ext: String,
     receiver: Receiver<PathBuf>,
     running: Arc<AtomicBool>,
 ) -> Vec<String> {
@@ -139,14 +141,14 @@ fn encoder_thread(
         );
         // Construct the encoded chunk's remote file name
         let enc_name = format!(
-            "{}/{}.{}",
+            "{}/enc_{}.{}",
             TMP_DIR,
             chunk
                 .file_stem()
                 .expect("No normal file")
                 .to_str()
                 .expect("Invalid Unicode"),
-            "mp4"
+            out_ext
         );
 
         // Encode the chunk remotely
