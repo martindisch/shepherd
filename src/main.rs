@@ -19,6 +19,7 @@ fn main() {
                 .short("c")
                 .long("clients")
                 .value_name("hostnames")
+                .use_delimiter(true)
                 .takes_value(true)
                 .required(true)
                 .help("Comma-separated list of encoding hosts"),
@@ -77,7 +78,7 @@ fn main() {
     // If we get here, unwrap is safe on mandatory arguments
     let input = matches.value_of("IN").unwrap();
     let output = matches.value_of("OUT").unwrap();
-    let hosts = matches.value_of("clients").unwrap().split(',');
+    let hosts = matches.values_of("clients").unwrap().collect();
     let seconds = matches.value_of("length");
     let tmp = matches.value_of("tmp");
     let keep = matches.is_present("keep");
@@ -110,25 +111,11 @@ fn main() {
     .expect("Failed initializing logger");
 
     if cfg!(debug_assertions) {
-        shepherd::run(
-            input,
-            output,
-            &args,
-            hosts.collect(),
-            seconds,
-            tmp,
-            keep,
-        )
-        .unwrap();
-    } else if let Err(e) = shepherd::run(
-        input,
-        output,
-        &args,
-        hosts.collect(),
-        seconds,
-        tmp,
-        keep,
-    ) {
+        shepherd::run(input, output, &args, hosts, seconds, tmp, keep)
+            .unwrap();
+    } else if let Err(e) =
+        shepherd::run(input, output, &args, hosts, seconds, tmp, keep)
+    {
         error!("{}", e);
         process::exit(1);
     }
