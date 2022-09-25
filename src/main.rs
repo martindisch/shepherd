@@ -1,6 +1,8 @@
 use clap::{App, AppSettings, Arg};
 use log::error;
-use simplelog::{ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{
+    ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
+};
 use std::process;
 
 use shepherd;
@@ -105,8 +107,12 @@ fn main() {
 
     TermLogger::init(
         LevelFilter::Info,
-        ConfigBuilder::new().set_time_to_local(true).build(),
+        ConfigBuilder::new()
+            .set_time_offset_to_local()
+            .expect("Unable to determine time offset")
+            .build(),
         TerminalMode::Mixed,
+        ColorChoice::Auto,
     )
     .expect("Failed initializing logger");
 
